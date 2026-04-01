@@ -1,0 +1,91 @@
+# =========================
+# Build directories
+# =========================
+/build/
+/bin/
+/out/
+/Debug/
+/Release/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# =========================
+# Compiled objects & binaries
+# =========================
+*.o
+*.obj
+*.so
+*.a
+*.lib
+*.dll
+*.exe
+*.out
+
+# =========================
+# Logs & temp files
+# =========================
+*.log
+*.tmp
+*.temp
+
+# =========================
+# IDE / Editor files
+# =========================
+
+# VS Code
+.vscode/
+
+# CLion / JetBrains
+.idea/
+*.iml
+
+# Visual Studio
+*.vcxproj*
+*.sln
+*.user
+*.filters
+
+# =========================
+# OS-specific files
+# =========================
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Linux
+*~
+
+# =========================
+# Debugging / profiling
+# =========================
+*.gdb
+*.dSYM/
+*.prof
+
+# =========================
+# Threading / runtime dumps
+# =========================
+core
+core.*
+*.stackdump
+
+# =========================
+# Test outputs / benchmarks
+# =========================
+/tests/output/
+/benchmarks/output/
+
+# =========================
+# Custom (adjust if needed)
+# =========================
+# Large generated matrices or datasets
+/data/
+/generated/
