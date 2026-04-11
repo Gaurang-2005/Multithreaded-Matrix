@@ -1,7 +1,42 @@
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <memory>
 #include <thread>
+
+class task_queue {
+
+    int** q;
+    size_t next;
+    size_t s;
+    size_t elemsize;
+
+public:
+
+    task_queue(size_t a, size_t b) : next{0}, s{a * b}, elemsize{s} {
+
+        q = new int*[s];
+
+        for (size_t i = 0; i < s; i++) {
+            q[i] = new int[2];
+        }
+
+        for (size_t i = 0; i < a; i++) {
+            for (size_t j = 0; j < b; j++) {
+                q[i * a + j][0] = i;
+                q[i * a + j][1] = j;
+            }
+        }
+    }
+    int* pop() {
+        if (next >= s) return nullptr;
+        elemsize--;
+        return q[next++];
+    }
+
+    size_t elesize() const {return elemsize;}
+
+};
 
 template<typename T>
 class matrix {
@@ -13,7 +48,7 @@ public:
     matrix() : row{0}, col{0}, mat{nullptr} {}
 
     matrix(size_t a, size_t b): row{a}, col{b} {
-        mat = new T[row * col];
+        mat = new T[row * col]{0};
     }
 
     //copy constructor
@@ -82,42 +117,66 @@ public:
         return mat[a * (col) + b];
     }
 
-    void MultiplicationLoop(matrix<T>& result, const matrix<T>& second, size_t start, size_t end) const {
-        for (size_t i = start; i < end; i++) {
-            for (size_t j = 0; j < result.col; j++) {
-                result(i, j) = 0;
-            }
-            for (size_t k = 0; k < col; k++) {
-                T thisik = (*this)(i, k);
-                for (size_t j = 0; j < result.col; j++) {
-                    result(i, j) += thisik * second(k, j);
+    void MultiplicationLoop(matrix<T>& result, const matrix<T>& second, size_t blockSize, size_t blockX1, size_t blockY1, size_t blockX2, size_t blockY2) const {
+        
+        size_t maxX = std::min(this->col, blockSize*(blockX2 + 1)) - blockSize * blockX2;
+        size_t maxY = std::min(this->row, blockSize * (blockY1 + 1)) - blockSize * blockY1;
+        size_t common = std::min(this->col, blockSize * (blockX1 + 1)) - blockSize * blockX1;
+
+        size_t ir1 = blockY1 * blockSize;
+        size_t jr1 = blockX1 * blockSize;
+        size_t ir2 = blockY2 * blockSize;
+        size_t jr2 = blockX2 * blockSize;        
+        
+        for (size_t i = 0; i < maxY; i++) {
+            for (size_t j = 0; j < maxX; j++) {
+                for (size_t k = 0; k < common; k++) {
+                    result(ir1 + i, jr2 + j) += (*this)(ir1 + i, jr1 + k) * second(ir2 + k, jr2 + j);
                 }
             }
-        }    
+        }
     }
 
+    void blockRange(matrix<T>& result, const matrix<T>& second, size_t blockSize, task_queue& q, size_t blockX2) const {
+        size_t x2 = 0, y2 = 0;
+        while (q.elesize()) {
+            auto coord = q.pop();
+            if (!coord) return;
+            for (size_t i = 0; i < blockX2; i++) {
+                MultiplicationLoop(result, second, blockSize, coord[0], coord[1], i, coord[0]);
+            }
+        }
+    }
+
+    //With Blocking:
     matrix<T> operator*(const matrix<T>& second) const {
         assert(col == second.row);
         int hardThreads = std::thread::hardware_concurrency();
         hardThreads = (hardThreads > 0) ? hardThreads : 1;
-        unsigned int maxThreads = std::min(hardThreads, int(row));
+
+        size_t blockSize = 32;
+
+        size_t blockX1 = (col % blockSize == 0)? col / blockSize : col / blockSize + 1;
+        size_t blockY1 = (row % blockSize == 0)? row / blockSize : row / blockSize + 1;
+        size_t blockX2 = (second.col % blockSize == 0)? second.col / blockSize : second.col / blockSize + 1;
+        // size_t blockY2 = (second.row % blockSize == 0)? second.row / blockSize : second.row / blockSize + 1;
+
+        unsigned int blocks = (blockY1 * blockX2);
+
+        unsigned int maxThreads = std::min(hardThreads, int(blocks));
+        task_queue q(blockY1, blockX1);
 
         matrix<T> result(row, second.col);
-        size_t rowsPerThread = result.row / maxThreads;
         std::unique_ptr<std::thread[]> threadArr (new std::thread[maxThreads]);
 
         for (unsigned int i = 0; i < maxThreads; i++) {
-            if (i == maxThreads - 1) {
-                threadArr[i] = std::thread(&matrix<T>::MultiplicationLoop, this, std::ref(result), std::cref(second), rowsPerThread * i, result.row); 
-                break;
-            }
-            threadArr[i] = std::thread(&matrix<T>::MultiplicationLoop, this, std::ref(result), std::cref(second), rowsPerThread * i, rowsPerThread * (i + 1)); 
+            threadArr[i] = std::thread(&matrix<T>::blockRange, this, std::ref(result), std::cref(second), blockSize, std::ref(q), blockX2); 
         }
         for (unsigned int i = 0; i < maxThreads; i++) threadArr[i].join();
 
         return result;
     }
-
+    
     matrix<T>& operator*=(const matrix<T>& second) {
         assert(col == second.row);
         int hardThreads = std::thread::hardware_concurrency();
