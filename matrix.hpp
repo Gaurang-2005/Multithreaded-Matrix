@@ -117,9 +117,34 @@ public:
         return mat[a * (col) + b];
     }
 
+    matrix<T> operator+(const matrix<T>& second) const {
+        assert(col == second.col && row == second.row);
+        matrix<T> temp(row, col);
+
+        for (int i = 0; i < row; i++) {
+            for (int j = 0; j < col; j++) {
+                temp(i, j) = (*this)(i, j) + second(i, j);
+            }
+        }
+
+        return temp;
+    } 
+
+    matrix<T>& operator+=(const matrix<T>& second) const {
+        assert(col == second.col && row == second.row);
+
+        for (int i = 0; i < row; i++) {
+            for (int j = 0; j < col; j++) {
+                (*this)(i, j) += second(i, j);
+            }
+        }
+
+        return *this;
+    } 
+
     void MultiplicationLoop(matrix<T>& result, const matrix<T>& second, size_t blockSize, size_t blockX1, size_t blockY1, size_t blockX2, size_t blockY2) const {
         
-        size_t maxX = std::min(this->col, blockSize*(blockX2 + 1)) - blockSize * blockX2;
+        size_t maxX = std::min(this->col, blockSize * (blockX2 + 1)) - blockSize * blockX2;
         size_t maxY = std::min(this->row, blockSize * (blockY1 + 1)) - blockSize * blockY1;
         size_t common = std::min(this->col, blockSize * (blockX1 + 1)) - blockSize * blockX1;
 
