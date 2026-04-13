@@ -10,10 +10,11 @@ class matrix {
     T* mat;
 
 public:
+    size_t blockSize = 64;
     matrix() : row{0}, col{0}, mat{nullptr} {}
 
-    matrix(size_t a, size_t b): row{a}, col{b} {
-        mat = new T[row * col]{0};
+    matrix(size_t a, size_t b, double val = 0): row{a}, col{b} {
+        mat = new T[row * col]{val};
     }
 
     //copy constructor
@@ -88,7 +89,7 @@ public:
 
         for (int i = 0; i < row; i++) {
             for (int j = 0; j < col; j++) {
-                temp(i, j) = (*this)(i, j) + second(i, j);
+                temp.mat[i * col + j] = mat[i * col + j] + second.mat[i * col + j];
             }
         }
 
@@ -100,7 +101,7 @@ public:
 
         for (int i = 0; i < row; i++) {
             for (int j = 0; j < col; j++) {
-                (*this)(i, j) += second(i, j);
+                mat[i * col + j] += second.mat[i * col + j];
             }
         }
 
@@ -145,8 +146,6 @@ public:
 
         matrix<T> secondT = second.transpose();
 
-        size_t blockSize = 64;
-
         size_t blockX1 = (col % blockSize == 0)? col / blockSize : col / blockSize + 1;
         size_t blockY1 = (row % blockSize == 0)? row / blockSize : row / blockSize + 1;
         size_t blockX2 = (second.col % blockSize == 0)? second.col / blockSize : second.col / blockSize + 1;
@@ -171,24 +170,9 @@ public:
     }
     
     matrix<T>& operator*=(const matrix<T>& second) {
-        assert(col == second.row);
-        int hardThreads = std::thread::hardware_concurrency();
-        hardThreads = (hardThreads > 0) ? hardThreads : 1;
-        unsigned int maxThreads = std::min(hardThreads, int(row));
 
-        matrix<T> result(row, second.col);
-        size_t rowsPerThread = result.row / maxThreads;
-        std::unique_ptr<std::thread[]> threadArr (new std::thread[maxThreads]);
+        *this = *this * second;
 
-        for (unsigned int i = 0; i < maxThreads; i++) {
-            if (i == maxThreads - 1) {
-                threadArr[i] = std::thread(&matrix<T>::MultiplicationLoop, this, std::ref(result), std::cref(second), rowsPerThread * i, result.row); 
-                break;
-            }
-            threadArr[i] = std::thread(&matrix<T>::MultiplicationLoop, this, std::ref(result), std::cref(second), rowsPerThread * i, rowsPerThread * (i + 1)); 
-        }
-        for (unsigned int i = 0; i < maxThreads; i++) threadArr[i].join();
-        *this = result;
         return *this;
     }
     matrix<T> operator*(T num) const {
@@ -196,7 +180,7 @@ public:
 
         for (size_t i = 0; i < row; i++) {
             for (size_t j = 0; j < col; j++) {
-                result(i, j) = (*this)(i, j) * num;
+                result.mat[i * col + j] = mat[i * col + j] * num;
             }
         }
 
@@ -207,7 +191,7 @@ public:
 
         for (size_t i = 0; i < row; i++) {
             for (size_t j = 0; j < col; j++) {
-                (*this)(i, j) *= num;
+                mat[i * col + j] *= num;
             }
         }
 
@@ -219,7 +203,7 @@ public:
 
         for (size_t i = 0; i < temp.row; i++) {
             for (size_t j = 0; j < temp.col; j++) {
-                result(i, j) = temp(i, j) * num;
+                result.mat[i * result.col + j] = temp.mat[i * temp.col + j] * num;
             }
         }
 
