@@ -107,7 +107,30 @@ public:
 
         return *this;
     } 
+    matrix<T> operator-(const matrix<T>& second) const {
+        assert(col == second.col && row == second.row);
+        matrix<T> temp(row, col);
 
+        for (int i = 0; i < row; i++) {
+            for (int j = 0; j < col; j++) {
+                temp.mat[i * col + j] = mat[i * col + j] - second.mat[i * col + j];
+            }
+        }
+
+        return temp;
+    } 
+
+    matrix<T>& operator-=(const matrix<T>& second) {
+        assert(col == second.col && row == second.row);
+
+        for (int i = 0; i < row; i++) {
+            for (int j = 0; j < col; j++) {
+                mat[i * col + j] -= second.mat[i * col + j];
+            }
+        }
+
+        return *this;
+    }     
     void MultiplicationLoop(matrix<T>& result, const matrix<T>& second, size_t blockSize, size_t blockX1, size_t blockY1, size_t blockX2, size_t blockY2) const {
         
         size_t maxX = std::min(second.row, blockSize * (blockX2 + 1)) - blockSize * blockX2;
