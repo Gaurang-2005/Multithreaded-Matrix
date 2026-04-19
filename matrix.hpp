@@ -15,7 +15,8 @@ public:
     matrix() : row{0}, col{0}, mat{nullptr} {}
 
     matrix(size_t a, size_t b, double val = 0): row{a}, col{b} {
-        mat = new T[row * col]{val};
+        mat = new T[row * col];
+        for (size_t i = 0; i < row * col; i++) mat[i] = val;
     }
 
     //copy constructor
@@ -79,7 +80,7 @@ public:
         return mat[a * (col) + b];
     }
     matrix<T> operator()(size_t a) const {
-        assert(a < col);
+        assert(a < row);
         matrix<T> temp(1, col);
         for (size_t i = 0; i < col; i++) {
             temp.mat[i] = mat[a * col + i];
