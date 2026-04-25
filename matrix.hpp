@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <memory>
 #include <thread>
+#include <experimental/simd>
 
 template<typename T>
 class matrix {
@@ -149,7 +150,7 @@ public:
     }
     void MultiplicationLoop(matrix<T>& result, const matrix<T>& second, size_t blockSize, size_t blockX1, size_t blockY1, size_t blockX2, size_t blockY2) const {
         
-        size_t maxX = std::min(second.row, blockSize * (blockX2 + 1)) - blockSize * blockX2;
+        size_t maxX = std::min(second.col, blockSize * (blockX2 + 1)) - blockSize * blockX2;
         size_t maxY = std::min(row, blockSize * (blockY1 + 1)) - blockSize * blockY1;
         size_t common = std::min(col, blockSize * (blockX1 + 1)) - blockSize * blockX1;
 
@@ -157,13 +158,54 @@ public:
         size_t jr1 = blockX1 * blockSize;
         size_t ir2 = blockY2 * blockSize;
         size_t jr2 = blockX2 * blockSize;        
-        
+
+        const size_t nPerSIMDReg = std::experimental::simd<T>::size();
+
         for (size_t i = 0; i < maxY; i++) {
-            for (size_t k = 0; k < common; k++) {
-                T temp = mat[(ir1 + i) * col + jr1 + k];
-                for (size_t j = 0; j < maxX; j++) {
-                    result.mat[(ir1 + i) * result.col + jr2 + j] += temp * second.mat[(jr2 + j) * second.col + ir2 + k];
+            size_t j = 0;
+            for (; j + 4 * nPerSIMDReg <= maxX; j += 4 * nPerSIMDReg) {
+                std::experimental::simd<T> res1(&result.mat[(ir1 + i) * result.col + jr2 + j], std::experimental::element_aligned);
+                std::experimental::simd<T> res2(&result.mat[(ir1 + i) * result.col + jr2 + j + nPerSIMDReg], std::experimental::element_aligned);
+                std::experimental::simd<T> res3(&result.mat[(ir1 + i) * result.col + jr2 + j + 2 * nPerSIMDReg], std::experimental::element_aligned);
+                std::experimental::simd<T> res4(&result.mat[(ir1 + i) * result.col + jr2 + j + 3 * nPerSIMDReg], std::experimental::element_aligned);
+                size_t k = 0;
+                std::experimental::simd<T> sec1(&second.mat[(ir2 + k) * second.col + jr2 + j], std::experimental::element_aligned);
+                std::experimental::simd<T> broad(mat[(ir1 + i) * col + jr1 + k]);
+                std::experimental::simd<T> sec2(&second.mat[(ir2 + k) * second.col + jr2 + j + nPerSIMDReg], std::experimental::element_aligned);
+                std::experimental::simd<T> sec3(&second.mat[(ir2 + k) * second.col + jr2 + j + 2 * nPerSIMDReg], std::experimental::element_aligned);
+                std::experimental::simd<T> sec4(&second.mat[(ir2 + k) * second.col + jr2 + j + 3 * nPerSIMDReg], std::experimental::element_aligned);
+                for (++k; k < common; k++) {
+                    std::experimental::simd<T> tempsec1(&second.mat[(ir2 + k) * second.col + jr2 + j], std::experimental::element_aligned);
+                    std::experimental::simd<T> tempbroad(mat[(ir1 + i) * col + jr1 + k]);
+                    std::experimental::simd<T> tempsec2(&second.mat[(ir2 + k) * second.col + jr2 + j + nPerSIMDReg], std::experimental::element_aligned);
+                    std::experimental::simd<T> tempsec3(&second.mat[(ir2 + k) * second.col + jr2 + j + 2 * nPerSIMDReg], std::experimental::element_aligned);
+                    std::experimental::simd<T> tempsec4(&second.mat[(ir2 + k) * second.col + jr2 + j + 3 * nPerSIMDReg], std::experimental::element_aligned);
+                    res1 += broad * sec1;
+                    res2 += broad * sec2;
+                    res3 += broad * sec3;
+                    res4 += broad * sec4;
+                    broad = tempbroad;
+                    sec1 = tempsec1;
+                    sec2 = tempsec2;
+                    sec3 = tempsec3;
+                    sec4 = tempsec4;                    
+                    //result.mat[(ir1 + i) * result.col + jr2 + j] += temp * second.mat[(jr2 + j) * second.col + ir2 + k];
                 }
+                res1 += broad * sec1;
+                res2 += broad * sec2;
+                res3 += broad * sec3;
+                res4 += broad * sec4;
+                res1.copy_to(&result.mat[(ir1 + i) * result.col + jr2 + j], std::experimental::element_aligned);
+                res2.copy_to(&result.mat[(ir1 + i) * result.col + jr2 + j + nPerSIMDReg], std::experimental::element_aligned);
+                res3.copy_to(&result.mat[(ir1 + i) * result.col + jr2 + j + 2 * nPerSIMDReg], std::experimental::element_aligned);
+                res4.copy_to(&result.mat[(ir1 + i) * result.col + jr2 + j + 3 * nPerSIMDReg], std::experimental::element_aligned);
+            }
+            for (; j < maxX; j++) {
+                T temp = 0;
+                for (size_t k = 0; k < common; k++) {
+                    temp += mat[(ir1 + i) * col + jr1 + k] * second.mat[(ir2 + k) * second.col + jr2 + j];
+                }
+                result.mat[(ir1 + i) * result.col + jr2 + j] += temp;
             }
         }
     }
@@ -183,7 +225,7 @@ public:
         int hardThreads = std::thread::hardware_concurrency();
         hardThreads = (hardThreads > 0) ? hardThreads : 1;
 
-        matrix<T> secondT = second.transpose();
+        // matrix<T> secondT = second.transpose();
 
         size_t blockX1 = (col % blockSize == 0)? col / blockSize : col / blockSize + 1;
         size_t blockY1 = (row % blockSize == 0)? row / blockSize : row / blockSize + 1;
@@ -200,7 +242,7 @@ public:
         std::unique_ptr<std::thread[]> threadArr (new std::thread[maxThreads]);
         unsigned int blocksPerThread = Rblocks / maxThreads;
         for (unsigned int i = 0; i < maxThreads; i++) {
-            threadArr[i] = std::thread(&matrix<T>::blockRange, this, std::ref(result), std::ref(secondT), blockSize, blockX1, blockRX, i * blocksPerThread, (i == maxThreads - 1)?(i + 1) * blocksPerThread + Rblocks % maxThreads:(i + 1) * blocksPerThread); 
+            threadArr[i] = std::thread(&matrix<T>::blockRange, this, std::ref(result), std::ref(second), blockSize, blockX1, blockRX, i * blocksPerThread, (i == maxThreads - 1)?(i + 1) * blocksPerThread + Rblocks % maxThreads:(i + 1) * blocksPerThread); 
         }
 
         for (unsigned int i = 0; i < maxThreads; i++) threadArr[i].join();
